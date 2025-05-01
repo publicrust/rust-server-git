@@ -6,16 +6,10 @@ on:
   schedule:
     - cron: '0 */6 * * *'  # run every 6 hours (UTC)
 
+# Add permissions needed for artifact upload
 permissions:
   contents: read
-  actions: write # Needed for upload-artifact
-
-env:
-  # Define server directory using HOME
-  RUST_SERVER_DIR: $HOME/rust_server
-  PLUGIN_NAME: StringPoolDumper
-  PLUGIN_AUTHOR: RustGPT
-  PLUGIN_VERSION: "1.0.0"
+  actions: write
 
 jobs:
   run-plugin:
@@ -33,26 +27,30 @@ jobs:
             -o install_rust_server.sh
           chmod +x install_rust_server.sh
 
-      - name: Install Rust server via script
+      - name: Install Rust server into workspace
         run: |
           # Installer will use $HOME/rust_server internally
           ./install_rust_server.sh
-          # Optional basic check
-          if [ ! -f "$RUST_SERVER_DIR/RustDedicated" ]; then
-            echo "::error::RustDedicated executable not found after installation script!"
-            exit 1
-          fi
 
-      - name: "Generate ${PLUGIN_NAME} Plugin"
+      - name: Link SteamClient library
         run: |
-          PLUGIN_PATH="$RUST_SERVER_DIR/oxide/plugins/${PLUGIN_NAME}.cs"
+          # Create Steam SDK directory for 64-bit library
+          mkdir -p ~/.steam/sdk64
+          # Create symbolic link to steamclient.so from SteamCMD install (usually in $HOME/steamcmd)
+          # Use -f to overwrite if link exists, -s for symbolic
+          ln -sf "$HOME/steamcmd/linux64/steamclient.so" ~/.steam/sdk64/steamclient.so
+
+      - name: Generate StringPoolDumper Plugin
+        run: |
+          # Hardcoded values instead of env vars
+          PLUGIN_PATH="$HOME/rust_server/oxide/plugins/StringPoolDumper.cs"
           mkdir -p "$(dirname "$PLUGIN_PATH")"
           cat << EOF > "$PLUGIN_PATH"
           using Oxide.Core;
           namespace Oxide.Plugins {
-              [Info("${PLUGIN_NAME}", "${PLUGIN_AUTHOR}", "${PLUGIN_VERSION}")]
+              [Info("StringPoolDumper", "RustGPT", "1.0.0")]
               [Description("Dumps StringPool.toNumber dictionary and shuts down the server")]
-              public class ${PLUGIN_NAME} : RustPlugin {
+              public class StringPoolDumper : RustPlugin {
                   private const string FileName = "stringpool_dump.json";
                   private void OnServerInitialized(bool initial) {
                       Puts("Server initialized, starting dump...");
@@ -69,36 +67,19 @@ jobs:
           }
           EOF
 
-      - name: Link SteamClient library
-        run: |
-          # Create Steam SDK directory for 64-bit library
-          mkdir -p ~/.steam/sdk64
-          # Create symbolic link to steamclient.so from SteamCMD install (usually in $HOME/steamcmd)
-          # Use -f to overwrite if link exists, -s for symbolic
-          STEAMCMD_LIB="$HOME/steamcmd/linux64/steamclient.so"
-          if [ -f "$STEAMCMD_LIB" ]; then
-            ln -sf "$STEAMCMD_LIB" ~/.steam/sdk64/steamclient.so
-          else
-            echo "::warning::Steam client library not found at $STEAMCMD_LIB. Server might fail to start."
-          fi
-
-      - name: Start Rust Server (foreground, will block until plugin quits)
+      - name: Start Rust Server and Watch Logs
         run: |
           echo "Starting server in foreground..."
-          cd "$RUST_SERVER_DIR"
-          if [ -f "./start.sh" ]; then
-            ./start.sh
-            echo "Server process finished."
-          else
-            echo "::error::start.sh not found in $RUST_SERVER_DIR"
-            exit 1
-          fi
+          cd $HOME/rust_server
+          # Execute start.sh directly. Workflow will block here until server quits.
+          ./start.sh
+          echo "Server process finished."
 
+      # Add artifact upload step back
       - name: Upload StringPool Dump Artifact
         uses: ./.github/actions/upload-artifact # Using local action
-        # Run this step even if the server start step failed (e.g., if dump happened but server crashed)
-        if: always()
+        if: always() # Run even if previous steps fail
         with:
           name: stringpool-dump
-          # Use correct path from env var
-          path: ${{ env.RUST_SERVER_DIR }}/oxide/data/stringpool_dump.json
+          # Hardcoded path
+          path: $HOME/rust_server/oxide/data/stringpool_dump.json
