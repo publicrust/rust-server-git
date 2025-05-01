@@ -16,7 +16,7 @@ permissions:
   actions: write
 
 env:
-  RUST_SERVER_DIR: ${{ github.workspace }}/rust_server
+  RUST_SERVER_DIR: $HOME/rust_server
   PLUGIN_NAME: StringPoolDumper
   PLUGIN_AUTHOR: RustGPT
   PLUGIN_VERSION: "1.0.0"
@@ -50,6 +50,11 @@ jobs:
       - name: "Install Rust Server with Oxide"
         run: |
           ./install_rust_server.sh
+
+      - name: "List Rust Server Directory Contents"
+        run: |
+          echo "Listing contents of $RUST_SERVER_DIR:"
+          ls -la "$RUST_SERVER_DIR"
 
       - name: "Generate ${PLUGIN_NAME} Plugin"
         run: |
