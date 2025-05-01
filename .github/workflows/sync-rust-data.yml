@@ -32,6 +32,51 @@ jobs:
           # Installer will use /home/runner/rust_server internally
           ./install_rust_server.sh
 
+      # --- NEW: Generate Template ---
+      - name: Clone and Build Template Generator
+        run: |
+          echo "Cloning generator..."
+          # Clone into /home/runner/generator to avoid conflicts
+          git clone https://github.com/publicrust/rust-template-generator /home/runner/generator
+          echo "Building generator..."
+          cd /home/runner/generator
+          # Build in Release mode for potentially better performance
+          dotnet build --configuration Release
+          echo "Generator built."
+      - name: Run Template Generator
+        run: |
+          echo "Running generator (UpdateOnly mode)..."
+          GENERATOR_PROJECT="/home/runner/generator/RustTemplateGenerator/RustTemplateGenerator.csproj"
+          INPUT_DIR="/home/runner/rust_server/RustDedicated_Data/Managed"
+          OUTPUT_DIR="/home/runner/generator-output" # Temporary output dir
+
+          # Ensure input directory exists
+          if [ ! -d "$INPUT_DIR" ]; then
+            echo "::error::Input directory for generator not found: $INPUT_DIR"
+            # List parent dir for context
+            ls -la "/home/runner/rust_server/RustDedicated_Data/" || true
+            exit 1
+          fi
+
+          # Create output dir
+          mkdir -p "$OUTPUT_DIR"
+
+          # Run the generator
+          dotnet run --project "$GENERATOR_PROJECT" -- --input "$INPUT_DIR" --output "$OUTPUT_DIR" --mode UpdateOnly
+          echo "Generator finished."
+
+          # Check if hooks file was generated for debugging
+          GENERATED_HOOKS_FILE="$OUTPUT_DIR/.rust-analyzer/hooks.json"
+          if [ ! -f "$GENERATED_HOOKS_FILE" ]; then
+             echo "::warning::hooks.json not found in generator output directory $OUTPUT_DIR/.rust-analyzer/"
+             # Optional: list output dir contents
+             echo "Listing contents of $OUTPUT_DIR:"
+             ls -la "$OUTPUT_DIR" || true
+             echo "Listing contents of $OUTPUT_DIR/.rust-analyzer/:"
+             ls -la "$OUTPUT_DIR/.rust-analyzer/" || true
+          fi
+      # --- END: Generate Template ---
+
       - name: Link SteamClient library
         run: |
           # Create Steam SDK directory for 64-bit library
@@ -113,6 +158,19 @@ jobs:
             echo "::warning::stringpool_dump.json not found at $SOURCE_JSON"
           fi
 
+          # --- NEW: Copy hooks.json ---
+          echo "Copying hooks.json..."
+          GENERATOR_HOOKS_FILE="/home/runner/generator-output/.rust-analyzer/hooks.json"
+          # Destination directory was already created for stringPool.json
+          DEST_HOOKS_FILE="${{ github.workspace }}/.rust-analyzer/hooks.json"
+          if [ -f "$GENERATOR_HOOKS_FILE" ]; then
+            cp "$GENERATOR_HOOKS_FILE" "$DEST_HOOKS_FILE"
+            echo "hooks.json copied to $DEST_HOOKS_FILE."
+          else
+            echo "::warning::Generator hooks.json not found at $GENERATOR_HOOKS_FILE"
+          fi
+          # --- END: Copy hooks.json ---
+
       - name: Commit and Push Data
         run: |
           # Настраиваем Git пользователя (необходимо для коммита)
@@ -121,7 +179,7 @@ jobs:
 
           # Добавляем новые/измененные файлы и папки в индекс Git
           # Используем || true на случай, если одна из папок не скопировалась
-          git add Managed .rust-analyzer/stringPool.json || true
+          git add Managed .rust-analyzer/stringPool.json .rust-analyzer/hooks.json || true
 
           echo "--- Git Status after add ---"
           git status
@@ -133,7 +191,7 @@ jobs:
           else
             echo "Changes detected, committing and pushing..."
             # Создаем коммит
-            git commit -m "Update Managed folder and StringPool data [skip ci]"
+            git commit -m "Update Managed folder, StringPool, and Hooks data [skip ci]"
             # Отправляем коммит в ту же ветку, где запущен workflow
             # Используем GITHUB_TOKEN для аутентификации
             git push https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref_name }}
