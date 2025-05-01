@@ -60,7 +60,7 @@ jobs:
                       _ = StringPool.Get(string.Empty);
                       Interface.Oxide.DataFileSystem.WriteObject(FileName, StringPool.toNumber);
                       Puts($"StringPool dumped to {FileName}");
-                      Server.Command("quit", "Shutdown initiated by dump plugin");
+                      Server.Command("quit");
                       Puts("Quit command issued.");
                   }
               }
