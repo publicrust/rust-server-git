@@ -35,33 +35,79 @@ jobs:
       - name: "Checkout Repository"
         uses: actions/checkout@v3
 
-      - name: "Prepare Workspace"
-        run: |
-          mkdir -p "$RUST_SERVER_DIR"
-
-      - name: "Download and Prepare Installer"
-        id: installer
+      - name: "Download Installer Script (for reference/potential future use)"
+        id: installer_download
         run: |
           curl -sL \
             https://raw.githubusercontent.com/publicrust/rust-server-setup/main/install_rust_server.sh \
             -o install_rust_server.sh
           chmod +x install_rust_server.sh
+          echo "Installer script downloaded, but will not be executed directly."
+          # We assume steamcmd setup happens here or is already present
 
-      - name: "Install Rust Server with Oxide"
+      - name: "Ensure Directories Exist"
         run: |
-          # Run the downloaded script and capture output
-          echo "--- Running downloaded install_rust_server.sh ---"
-          ./install_rust_server.sh 2>&1 | tee install_log.txt
-          echo "--- Install Script Log ---"
-          cat install_log.txt
-          # Check if expected files exist (important since external script might fail)
+          mkdir -p "$HOME/steamcmd"
+          mkdir -p "$RUST_SERVER_DIR"
+
+      - name: "Install/Update Rust Server via SteamCMD"
+        run: |
+          echo "Running SteamCMD to install/update Rust server..."
+          # Assuming steamcmd is available at $HOME/steamcmd/steamcmd.sh
+          # If not, the original script's download/extract logic needs to be run first
+          # Check if steamcmd exists, basic check
+          if [ ! -f "$HOME/steamcmd/steamcmd.sh" ]; then
+             echo "Downloading SteamCMD..."
+             cd "$HOME/steamcmd"
+             wget -q "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz"
+             tar -xvzf steamcmd_linux.tar.gz
+             rm steamcmd_linux.tar.gz
+             echo "SteamCMD downloaded."
+          fi
+
+          "$HOME/steamcmd/steamcmd.sh" +login anonymous +force_install_dir "$RUST_SERVER_DIR" +app_update 258550 +quit
+          echo "SteamCMD finished."
+          echo "Listing contents of $RUST_SERVER_DIR after steamcmd:"
+          ls -la "$RUST_SERVER_DIR"
+
+      - name: "Verify RustDedicated Executable"
+        run: |
           if [ ! -f "$RUST_SERVER_DIR/RustDedicated" ]; then
-            echo "::error::RustDedicated executable not found after installation!"
-            # Optionally list dir content for debugging
-            echo "Listing contents of $RUST_SERVER_DIR:"
-            ls -la "$RUST_SERVER_DIR" || echo "Could not list $RUST_SERVER_DIR"
+            echo "::error::RustDedicated executable not found in $RUST_SERVER_DIR after SteamCMD run!"
             exit 1
           fi
+          echo "RustDedicated found."
+
+      - name: "Install/Update Oxide (uMod)"
+        run: |
+          echo "Installing Oxide..."
+          cd "$RUST_SERVER_DIR"
+          wget -q -O oxide.zip "https://umod.org/games/rust/download/develop"
+          unzip -o oxide.zip
+          rm oxide.zip
+          echo "Oxide installed."
+
+      - name: "Create start.sh Script"
+        run: |
+          echo "Creating start.sh..."
+          cat > "$RUST_SERVER_DIR/start.sh" <<EOL
+          #!/bin/bash
+          set -e
+          cd "\\$(dirname "\\$0")" # Ensure script runs from its directory
+          ./RustDedicated -batchmode -nographics \\
+          +server.port 28015 \\
+          +server.hostname "My Rust Server" \\
+          +server.identity "my_server" \\
+          +server.maxplayers 50 \\
+          +server.worldsize 1000 \\
+          +server.seed 12345 \\
+          +server.saveinterval 300 \\
+          +server.secure 1 \\
+          +server.description "Welcome to my Rust server!" \\
+          +server.tickrate 30
+          EOL
+          chmod +x "$RUST_SERVER_DIR/start.sh"
+          echo "start.sh created in $RUST_SERVER_DIR."
 
       - name: "Generate ${PLUGIN_NAME} Plugin"
         run: |
