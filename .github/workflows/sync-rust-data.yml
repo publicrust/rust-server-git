@@ -8,7 +8,7 @@ on:
 
 # Add permissions needed for artifact upload
 permissions:
-  contents: read
+  contents: write # Allow pushing changes to the repo
   actions: write
 
 jobs:
@@ -140,3 +140,5 @@ jobs:
             echo "Changes pushed."
           fi
       # --- КОНЕЦ НОВЫХ ШАГОВ ---
+
+# Define RUST_SERVER_DIR env var primarily for the upload step
