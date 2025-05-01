@@ -49,12 +49,14 @@ jobs:
 
       - name: "Install Rust Server with Oxide"
         run: |
-          ./install_rust_server.sh
-
-      - name: "List Rust Server Directory Contents"
-        run: |
-          echo "Listing contents of $RUST_SERVER_DIR:"
-          ls -la "$RUST_SERVER_DIR"
+          ./install_rust_server.sh 2>&1 | tee install_log.txt
+          echo "--- Install Script Log ---"
+          cat install_log.txt
+          # Optional: Check if expected files exist
+          if [ ! -f "$RUST_SERVER_DIR/RustDedicated" ]; then
+            echo "::error::RustDedicated executable not found after installation!"
+            exit 1
+          fi
 
       - name: "Generate ${PLUGIN_NAME} Plugin"
         run: |
