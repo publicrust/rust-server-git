@@ -4,3 +4,5 @@ Managed/Newtonsoft.Json.dll
 # Ignore platform-specific folders in Managed
 Managed/x64/
 Managed/x86/ 
+
+Managed/Managed/
