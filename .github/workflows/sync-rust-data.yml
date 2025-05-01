@@ -49,12 +49,17 @@ jobs:
 
       - name: "Install Rust Server with Oxide"
         run: |
+          # Run the downloaded script and capture output
+          echo "--- Running downloaded install_rust_server.sh ---"
           ./install_rust_server.sh 2>&1 | tee install_log.txt
           echo "--- Install Script Log ---"
           cat install_log.txt
-          # Optional: Check if expected files exist
+          # Check if expected files exist (important since external script might fail)
           if [ ! -f "$RUST_SERVER_DIR/RustDedicated" ]; then
             echo "::error::RustDedicated executable not found after installation!"
+            # Optionally list dir content for debugging
+            echo "Listing contents of $RUST_SERVER_DIR:"
+            ls -la "$RUST_SERVER_DIR" || echo "Could not list $RUST_SERVER_DIR"
             exit 1
           fi
 
