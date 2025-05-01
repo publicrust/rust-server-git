@@ -11,10 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360  # up to 6 hours
 
-    # declare where to install the server (inside workspace)
-    env:
-      RUST_SERVER_DIR: ${{ github.workspace }}/rust_server
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -28,7 +24,7 @@ jobs:
 
       - name: Install Rust server into workspace
         run: |
-          # Installer will use $RUST_SERVER_DIR internally
+          # Installer will use $HOME/rust_server internally
           ./install_rust_server.sh
 
       - name: Link SteamClient library
@@ -39,6 +35,17 @@ jobs:
           # Use -f to overwrite if link exists, -s for symbolic
           ln -sf "$HOME/steamcmd/linux64/steamclient.so" ~/.steam/sdk64/steamclient.so
 
+      - name: Start Rust Server
+        run: |
+          echo "Starting server in background..."
+          cd $HOME/rust_server
+          ./start.sh &
+          # Save PID to the correct location
+          echo $! > $HOME/rust_server/server.pid
+          echo "Server PID $! written to $HOME/rust_server/server.pid"
+          # Give server a moment to start up
+          sleep 10
+
       - name: Check if server process is running
         run: |
           echo "Checking for RustDedicated process..."
@@ -47,23 +54,27 @@ jobs:
       - name: Wait for StringPool dump
         run: |
           # Wait up to 5 minutes for plugin to write the JSON
-          timeout 300 bash -c 'until [ -f "${RUST_SERVER_DIR}/oxide/data/stringpool_dump.json" ]; do sleep 5; done'
+          # Use correct path for dump file
+          timeout 300 bash -c 'until [ -f "$HOME/rust_server/oxide/data/stringpool_dump.json" ]; do sleep 5; done'
 
       - name: Display Server Logs
         if: always() # Run even if the previous step failed
         run: |
-          echo "### Listing log directory: $RUST_SERVER_DIR/oxide/logs/"
-          ls -la "$RUST_SERVER_DIR/oxide/logs/" || echo "Log directory not found or empty."
+          # Use correct path for log directory
+          echo "### Listing log directory: $HOME/rust_server/oxide/logs/"
+          ls -la "$HOME/rust_server/oxide/logs/" || echo "Log directory not found or empty."
           echo "### Displaying last 200 lines of log files:"
-          tail -n 200 "$RUST_SERVER_DIR/oxide/logs/"*.log || echo "No *.log files found or other error occurred."
+          tail -n 200 "$HOME/rust_server/oxide/logs/"*.log || echo "No *.log files found or other error occurred."
 
       - name: Stop Rust server
         run: |
           # Terminate the background server process
-          kill "$(cat "${RUST_SERVER_DIR}/server.pid")" || true
+          # Use correct path for pid file
+          kill "$(cat "$HOME/rust_server/server.pid")" || true
 
       - name: Upload StringPool dump
         uses: ./.github/actions/upload-artifact
         with:
           name: stringpool-dump
-          path: rust_server/oxide/data/stringpool_dump.json
+          # Use correct absolute path for artifact
+          path: /home/runner/rust_server/oxide/data/stringpool_dump.json
