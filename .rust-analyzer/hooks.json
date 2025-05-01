@@ -1,6 +1,6 @@
 [
   {
-    "HookSignature": "OnGroupTitleSet(string groupName, string groupTitle)",
+    "HookSi1gnature": "OnGroupTitleSet(string groupName, string groupTitle)",
     "MethodSignature": "SetGroupTitle(string groupName, string groupTitle)",
     "MethodSourseCode": "\n\t[LibraryFunction(\u0022SetGroupTitle\u0022)]\n\tpublic bool SetGroupTitle(string groupName, string groupTitle)\n\t{\n\t\tif (!GroupExists(groupName))\n\t\t{\n\t\t\treturn false;\n\t\t}\n\t\tif (!groupsData.TryGetValue(groupName, out var value))\n\t\t{\n\t\t\treturn false;\n\t\t}\n\t\tif (value.Title == groupTitle)\n\t\t{\n\t\t\treturn true;\n\t\t}\n\t\tvalue.Title = groupTitle;\n\t\tInterface.CallHook(\u0022OnGroupTitleSet\u0022, groupName, groupTitle);\n\t\treturn true;\n\t}\n",
     "ClassName": "Permission",

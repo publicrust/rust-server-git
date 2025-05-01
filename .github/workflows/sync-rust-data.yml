@@ -154,8 +154,14 @@ jobs:
             exit 1
           fi
 
-          # Create output directory in workspace
-          mkdir -p "$OUTPUT_DIR"
+          # --- NEW: Remove existing output dir first ---
+          echo "Removing existing .knowlenge directory in workspace..."
+          rm -rf "${{ github.workspace }}/.knowlenge"
+          # --- END: Remove existing output dir ---
+
+          # Create output directory in workspace (parser needs parent)
+          # Parser itself should create the Decompiled subfolder
+          mkdir -p "${{ github.workspace }}/.knowlenge"
 
           # Run the parser
           dotnet run --project "$PARSER_PROJECT" -- -s "$INPUT_DIR" -o "$OUTPUT_DIR"
@@ -171,6 +177,13 @@ jobs:
 
       - name: Copy Data to Workspace
         run: |
+          # --- NEW: Remove existing dirs first ---
+          echo "Removing existing destination directories in workspace..."
+          rm -rf "${{ github.workspace }}/Managed"
+          rm -rf "${{ github.workspace }}/.rust-analyzer"
+          echo "Existing directories removed."
+          # --- END: Remove existing dirs ---
+
           echo "Copying Managed folder..."
           # Проверяем, существует ли исходная папка
           if [ -d "/home/runner/rust_server/RustDedicated_Data/Managed" ]; then
@@ -216,8 +229,8 @@ jobs:
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
           # Добавляем новые/измененные файлы и папки в индекс Git
-          # Используем || true на случай, если одна из папок не скопировалась
-          git add Managed .rust-analyzer/stringPool.json .rust-analyzer/hooks.json .knowlenge/ || true
+          # Добавляем корневые папки, чтобы git видел удаленные/добавленные файлы внутри
+          git add Managed .rust-analyzer .knowlenge || true
 
           echo "--- Git Status after add ---"
           git status
