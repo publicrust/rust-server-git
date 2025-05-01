@@ -72,7 +72,8 @@ jobs:
           echo "Starting server in foreground..."
           cd /home/runner/rust_server
           # Execute start.sh directly. Workflow will block here until server quits.
-          ./start.sh
+          # Add || true so the step doesn't fail when the server is killed (exit 137)
+          ./start.sh || true
           echo "Server process finished."
 
       # --- НОВЫЙ ШАГ ОТЛАДКИ ---
