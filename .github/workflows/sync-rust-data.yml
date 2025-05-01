@@ -41,7 +41,8 @@ jobs:
           echo "Building generator..."
           cd /home/runner/generator
           # Build in Release mode for potentially better performance
-          dotnet build --configuration Release
+          # Specify the path to the project file
+          dotnet build /home/runner/generator/RustTemplateGenerator/RustTemplateGenerator.csproj --configuration Release
           echo "Generator built."
       - name: Run Template Generator
         run: |
