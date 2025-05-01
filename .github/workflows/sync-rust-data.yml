@@ -1,21 +1,17 @@
 # .github/workflows/run-rust-plugin.yml
-name: "Run Rust Server Plugin"
-
-# Avoid overlapping runs
-concurrency:
-  group: "rust-plugin-runner"
-  cancel-in-progress: true
+name: Run Rust Server Plugin
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 */6 * * *'  # every 6 hours UTC
+    - cron: '0 */6 * * *'  # run every 6 hours (UTC)
 
 permissions:
   contents: read
-  actions: write
+  actions: write # Needed for upload-artifact
 
 env:
+  # Define server directory using HOME
   RUST_SERVER_DIR: $HOME/rust_server
   PLUGIN_NAME: StringPoolDumper
   PLUGIN_AUTHOR: RustGPT
@@ -23,91 +19,29 @@ env:
 
 jobs:
   run-plugin:
-    name: "Rust Server Plugin Runner"
     runs-on: ubuntu-latest
-    timeout-minutes: 360
-
-    defaults:
-      run:
-        shell: bash
+    timeout-minutes: 360  # up to 6 hours
 
     steps:
-      - name: "Checkout Repository"
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: "Download Installer Script (for reference/potential future use)"
-        id: installer_download
+      - name: Download and make installer executable
         run: |
-          curl -sL \
-            https://raw.githubusercontent.com/publicrust/rust-server-setup/main/install_rust_server.sh \
+          # Download installer that sets up Rust server, Oxide and plugin
+          curl -sL https://raw.githubusercontent.com/publicrust/rust-server-setup/main/install_rust_server.sh \
             -o install_rust_server.sh
           chmod +x install_rust_server.sh
-          echo "Installer script downloaded, but will not be executed directly."
-          # We assume steamcmd setup happens here or is already present
 
-      - name: "Ensure Directories Exist"
+      - name: Install Rust server via script
         run: |
-          mkdir -p "$HOME/steamcmd"
-          mkdir -p "$RUST_SERVER_DIR"
-
-      - name: "Install/Update Rust Server via SteamCMD"
-        run: |
-          echo "Running SteamCMD to install/update Rust server..."
-          # Assuming steamcmd is available at $HOME/steamcmd/steamcmd.sh
-          # If not, the original script's download/extract logic needs to be run first
-          # Check if steamcmd exists, basic check
-          if [ ! -f "$HOME/steamcmd/steamcmd.sh" ]; then
-             echo "Downloading SteamCMD..."
-             cd "$HOME/steamcmd"
-             wget -q "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz"
-             tar -xvzf steamcmd_linux.tar.gz
-             rm steamcmd_linux.tar.gz
-             echo "SteamCMD downloaded."
-          fi
-
-          "$HOME/steamcmd/steamcmd.sh" +login anonymous +force_install_dir "$RUST_SERVER_DIR" +app_update 258550 +quit
-          echo "SteamCMD finished."
-          echo "Listing contents of $RUST_SERVER_DIR after steamcmd:"
-          ls -la "$RUST_SERVER_DIR"
-
-      - name: "Verify RustDedicated Executable"
-        run: |
+          # Installer will use $HOME/rust_server internally
+          ./install_rust_server.sh
+          # Optional basic check
           if [ ! -f "$RUST_SERVER_DIR/RustDedicated" ]; then
-            echo "::error::RustDedicated executable not found in $RUST_SERVER_DIR after SteamCMD run!"
+            echo "::error::RustDedicated executable not found after installation script!"
             exit 1
           fi
-          echo "RustDedicated found."
-
-      - name: "Install/Update Oxide (uMod)"
-        run: |
-          echo "Installing Oxide..."
-          cd "$RUST_SERVER_DIR"
-          wget -q -O oxide.zip "https://umod.org/games/rust/download/develop"
-          unzip -o oxide.zip
-          rm oxide.zip
-          echo "Oxide installed."
-
-      - name: "Create start.sh Script"
-        run: |
-          echo "Creating start.sh..."
-          cat > "$RUST_SERVER_DIR/start.sh" <<EOL
-          #!/bin/bash
-          set -e
-          cd "\\$(dirname "\\$0")" # Ensure script runs from its directory
-          ./RustDedicated -batchmode -nographics \\
-          +server.port 28015 \\
-          +server.hostname "My Rust Server" \\
-          +server.identity "my_server" \\
-          +server.maxplayers 50 \\
-          +server.worldsize 1000 \\
-          +server.seed 12345 \\
-          +server.saveinterval 300 \\
-          +server.secure 1 \\
-          +server.description "Welcome to my Rust server!" \\
-          +server.tickrate 30
-          EOL
-          chmod +x "$RUST_SERVER_DIR/start.sh"
-          echo "start.sh created in $RUST_SERVER_DIR."
 
       - name: "Generate ${PLUGIN_NAME} Plugin"
         run: |
@@ -135,39 +69,36 @@ jobs:
           }
           EOF
 
-      - name: "Link SteamClient Library"
+      - name: Link SteamClient library
         run: |
+          # Create Steam SDK directory for 64-bit library
           mkdir -p ~/.steam/sdk64
-          ln -sf "$HOME/steamcmd/linux64/steamclient.so" ~/.steam/sdk64/steamclient.so
+          # Create symbolic link to steamclient.so from SteamCMD install (usually in $HOME/steamcmd)
+          # Use -f to overwrite if link exists, -s for symbolic
+          STEAMCMD_LIB="$HOME/steamcmd/linux64/steamclient.so"
+          if [ -f "$STEAMCMD_LIB" ]; then
+            ln -sf "$STEAMCMD_LIB" ~/.steam/sdk64/steamclient.so
+          else
+            echo "::warning::Steam client library not found at $STEAMCMD_LIB. Server might fail to start."
+          fi
 
-      - name: "Start Rust Server"
+      - name: Start Rust Server (foreground, will block until plugin quits)
         run: |
+          echo "Starting server in foreground..."
           cd "$RUST_SERVER_DIR"
-          nohup ./start.sh > server_console.log 2>&1 &
-          echo $! > server.pid
-          sleep 15
+          if [ -f "./start.sh" ]; then
+            ./start.sh
+            echo "Server process finished."
+          else
+            echo "::error::start.sh not found in $RUST_SERVER_DIR"
+            exit 1
+          fi
 
-      - name: "Verify Server Process"
-        run: |
-          ps aux | grep '[R]ustDedicated' || exit 1
-
-      - name: "Await StringPool Dump File"
-        run: |
-          timeout 300 bash -c 'until [ -f "$RUST_SERVER_DIR/oxide/data/stringpool_dump.json" ]; do sleep 5; done'
-
-      - name: "Display Logs"
-        if: always()
-        run: |
-          echo "## Server Console Log"
-          cat "$RUST_SERVER_DIR/server_console.log" || true
-          echo "## Oxide Log Directory"
-          ls -la "$RUST_SERVER_DIR/oxide/logs" || true
-          echo "## Last 200 Lines of Oxide Logs"
-          tail -n 200 "$RUST_SERVER_DIR/oxide/logs/"*.log || true
-
-      - name: "Upload StringPool Dump Artifact"
-        uses: ./.github/actions/upload-artifact
+      - name: Upload StringPool Dump Artifact
+        uses: ./.github/actions/upload-artifact # Using local action
+        # Run this step even if the server start step failed (e.g., if dump happened but server crashed)
         if: always()
         with:
           name: stringpool-dump
+          # Use correct path from env var
           path: ${{ env.RUST_SERVER_DIR }}/oxide/data/stringpool_dump.json
