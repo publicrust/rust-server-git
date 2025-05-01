@@ -78,8 +78,11 @@ jobs:
       # --- НОВЫЙ ШАГ ОТЛАДКИ ---
       - name: List Data Directory Contents After Server Stop
         run: |
-          echo "Listing contents of $HOME/rust_server/oxide/data/ after server stop:"
+          echo "Listing contents using \$HOME ($HOME/rust_server/oxide/data/):"
           ls -la "$HOME/rust_server/oxide/data/" || echo "Could not list $HOME/rust_server/oxide/data/"
+          echo "---"
+          echo "Listing contents using explicit path (/home/runner/rust_server/oxide/data/):"
+          ls -la "/home/runner/rust_server/oxide/data/" || echo "Could not list /home/runner/rust_server/oxide/data/"
       # --- КОНЕЦ НОВОГО ШАГА ОТЛАДКИ ---
 
       - name: Copy Data to Workspace
