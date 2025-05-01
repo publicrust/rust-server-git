@@ -29,21 +29,21 @@ jobs:
 
       - name: Install Rust server into workspace
         run: |
-          # Installer will use $HOME/rust_server internally
+          # Installer will use /home/runner/rust_server internally
           ./install_rust_server.sh
 
       - name: Link SteamClient library
         run: |
           # Create Steam SDK directory for 64-bit library
           mkdir -p ~/.steam/sdk64
-          # Create symbolic link to steamclient.so from SteamCMD install (usually in $HOME/steamcmd)
+          # Create symbolic link to steamclient.so from SteamCMD install (usually in /home/runner/steamcmd)
           # Use -f to overwrite if link exists, -s for symbolic
-          ln -sf "$HOME/steamcmd/linux64/steamclient.so" ~/.steam/sdk64/steamclient.so
+          ln -sf "/home/runner/steamcmd/linux64/steamclient.so" ~/.steam/sdk64/steamclient.so
 
       - name: Generate StringPoolDumper Plugin
         run: |
           # Hardcoded values instead of env vars
-          PLUGIN_PATH="$HOME/rust_server/oxide/plugins/StringPoolDumper.cs"
+          PLUGIN_PATH="/home/runner/rust_server/oxide/plugins/StringPoolDumper.cs"
           mkdir -p "$(dirname "$PLUGIN_PATH")"
           cat << EOF > "$PLUGIN_PATH"
           using Oxide.Core;
@@ -70,7 +70,7 @@ jobs:
       - name: Start Rust Server and Watch Logs
         run: |
           echo "Starting server in foreground..."
-          cd $HOME/rust_server
+          cd /home/runner/rust_server
           # Execute start.sh directly. Workflow will block here until server quits.
           ./start.sh
           echo "Server process finished."
@@ -78,8 +78,8 @@ jobs:
       # --- НОВЫЙ ШАГ ОТЛАДКИ ---
       - name: List Data Directory Contents After Server Stop
         run: |
-          echo "Listing contents using \$HOME ($HOME/rust_server/oxide/data/):"
-          ls -la "$HOME/rust_server/oxide/data/" || echo "Could not list $HOME/rust_server/oxide/data/"
+          echo "Listing contents using \$HOME (/home/runner/rust_server/oxide/data/):"
+          ls -la "/home/runner/rust_server/oxide/data/" || echo "Could not list /home/runner/rust_server/oxide/data/"
           echo "---"
           echo "Listing contents using explicit path (/home/runner/rust_server/oxide/data/):"
           ls -la "/home/runner/rust_server/oxide/data/" || echo "Could not list /home/runner/rust_server/oxide/data/"
@@ -89,16 +89,16 @@ jobs:
         run: |
           echo "Copying Managed folder..."
           # Проверяем, существует ли исходная папка
-          if [ -d "$HOME/rust_server/RustDedicated_Data/Managed" ]; then
+          if [ -d "/home/runner/rust_server/RustDedicated_Data/Managed" ]; then
             # Копируем рекурсивно в корень рабочего пространства workflow
-            cp -R "$HOME/rust_server/RustDedicated_Data/Managed" "${{ github.workspace }}/Managed"
+            cp -R "/home/runner/rust_server/RustDedicated_Data/Managed" "${{ github.workspace }}/Managed"
             echo "Managed folder copied."
           else
-            echo "::warning::Managed folder not found at $HOME/rust_server/RustDedicated_Data/Managed"
+            echo "::warning::Managed folder not found at /home/runner/rust_server/RustDedicated_Data/Managed"
           fi
 
           echo "Copying StringPool data..."
-          SOURCE_JSON="$HOME/rust_server/oxide/data/stringpool_dump.json"
+          SOURCE_JSON="/home/runner/rust_server/oxide/data/stringpool_dump.json"
           # Создаем папку .rust-analyzer в корне рабочего пространства, если ее нет
           DEST_DIR="${{ github.workspace }}/.rust-analyzer"
           mkdir -p "$DEST_DIR"
@@ -134,13 +134,4 @@ jobs:
             git push https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref_name }}
             echo "Changes pushed."
           fi
-
-      # Оставим загрузку артефакта на всякий случай,
-      # но основные данные теперь будут в коммите
-      - name: Upload StringPool Dump Artifact
-        uses: ./.github/actions/upload-artifact # Using local action
-        if: always() # Run even if previous steps fail
-        with:
-          name: stringpool-dump
-          # Path uses env var defined earlier
-          path: $HOME/rust_server/oxide/data/stringpool_dump.json
+      # --- КОНЕЦ НОВЫХ ШАГОВ ---
