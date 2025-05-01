@@ -108,7 +108,7 @@ jobs:
           tail -n 200 "$RUST_SERVER_DIR/oxide/logs/"*.log || true
 
       - name: "Upload StringPool Dump Artifact"
-        uses: actions/upload-artifact@v3
+        uses: ./.github/actions/upload-artifact
         if: always()
         with:
           name: stringpool-dump
