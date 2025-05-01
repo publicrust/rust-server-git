@@ -39,6 +39,11 @@ jobs:
           # Use -f to overwrite if link exists, -s for symbolic
           ln -sf "$HOME/steamcmd/linux64/steamclient.so" ~/.steam/sdk64/steamclient.so
 
+      - name: Check if server process is running
+        run: |
+          echo "Checking for RustDedicated process..."
+          ps aux | grep '[R]ustDedicated' || echo "Server process not found!"
+
       - name: Wait for StringPool dump
         run: |
           # Wait up to 5 minutes for plugin to write the JSON
