@@ -31,6 +31,14 @@ jobs:
           # Installer will use $RUST_SERVER_DIR internally
           ./install_rust_server.sh
 
+      - name: Link SteamClient library
+        run: |
+          # Create Steam SDK directory for 64-bit library
+          mkdir -p ~/.steam/sdk64
+          # Create symbolic link to steamclient.so from SteamCMD install (usually in $HOME/steamcmd)
+          # Use -f to overwrite if link exists, -s for symbolic
+          ln -sf "$HOME/steamcmd/linux64/steamclient.so" ~/.steam/sdk64/steamclient.so
+
       - name: Wait for StringPool dump
         run: |
           # Wait up to 5 minutes for plugin to write the JSON
