@@ -75,6 +75,13 @@ jobs:
           ./start.sh
           echo "Server process finished."
 
+      # --- НОВЫЙ ШАГ ОТЛАДКИ ---
+      - name: List Data Directory Contents After Server Stop
+        run: |
+          echo "Listing contents of $HOME/rust_server/oxide/data/ after server stop:"
+          ls -la "$HOME/rust_server/oxide/data/" || echo "Could not list $HOME/rust_server/oxide/data/"
+      # --- КОНЕЦ НОВОГО ШАГА ОТЛАДКИ ---
+
       - name: Copy Data to Workspace
         run: |
           echo "Copying Managed folder..."
