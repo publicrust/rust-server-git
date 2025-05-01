@@ -75,11 +75,62 @@ jobs:
           ./start.sh
           echo "Server process finished."
 
-      # Add artifact upload step back
+      - name: Copy Data to Workspace
+        run: |
+          echo "Copying Managed folder..."
+          # Проверяем, существует ли исходная папка
+          if [ -d "$HOME/rust_server/RustDedicated_Data/Managed" ]; then
+            # Копируем рекурсивно в корень рабочего пространства workflow
+            cp -R "$HOME/rust_server/RustDedicated_Data/Managed" "${{ github.workspace }}/Managed"
+            echo "Managed folder copied."
+          else
+            echo "::warning::Managed folder not found at $HOME/rust_server/RustDedicated_Data/Managed"
+          fi
+
+          echo "Copying StringPool data..."
+          SOURCE_JSON="$HOME/rust_server/oxide/data/stringpool_dump.json"
+          # Создаем папку .rust-analyzer в корне рабочего пространства, если ее нет
+          DEST_DIR="${{ github.workspace }}/.rust-analyzer"
+          mkdir -p "$DEST_DIR"
+          DEST_JSON="$DEST_DIR/stringPool.json"
+          # Проверяем, существует ли исходный файл
+          if [ -f "$SOURCE_JSON" ]; then
+            # Копируем и переименовываем
+            cp "$SOURCE_JSON" "$DEST_JSON"
+            echo "StringPool data copied to $DEST_JSON."
+          else
+            echo "::warning::stringpool_dump.json not found at $SOURCE_JSON"
+          fi
+
+      - name: Commit and Push Data
+        run: |
+          # Настраиваем Git пользователя (необходимо для коммита)
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+          # Добавляем новые/измененные файлы и папки в индекс Git
+          # Используем || true на случай, если одна из папок не скопировалась
+          git add Managed .rust-analyzer/stringPool.json || true
+
+          # Проверяем, есть ли изменения для коммита
+          if git diff --quiet --exit-code --cached; then
+            echo "No changes detected to commit."
+          else
+            echo "Changes detected, committing and pushing..."
+            # Создаем коммит
+            git commit -m "Update Managed folder and StringPool data [skip ci]"
+            # Отправляем коммит в ту же ветку, где запущен workflow
+            # Используем GITHUB_TOKEN для аутентификации
+            git push https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref_name }}
+            echo "Changes pushed."
+          fi
+
+      # Оставим загрузку артефакта на всякий случай,
+      # но основные данные теперь будут в коммите
       - name: Upload StringPool Dump Artifact
         uses: ./.github/actions/upload-artifact # Using local action
         if: always() # Run even if previous steps fail
         with:
           name: stringpool-dump
-          # Hardcoded path
+          # Path uses env var defined earlier
           path: $HOME/rust_server/oxide/data/stringpool_dump.json
