@@ -51,7 +51,7 @@ jobs:
               [Info("StringPoolDumper", "RustGPT", "1.0.0")]
               [Description("Dumps StringPool.toNumber dictionary and shuts down the server")]
               public class StringPoolDumper : RustPlugin {
-                  private const string FileName = "stringpool_dump.json";
+                  private const string FileName = "stringpool_dump";
                   private void OnServerInitialized(bool initial) {
                       Puts("Server initialized, starting dump...");
                       DumpStringPool();
@@ -122,6 +122,10 @@ jobs:
           # Добавляем новые/измененные файлы и папки в индекс Git
           # Используем || true на случай, если одна из папок не скопировалась
           git add Managed .rust-analyzer/stringPool.json || true
+
+          echo "--- Git Status after add ---"
+          git status
+          echo "--- End Git Status ---"
 
           # Проверяем, есть ли изменения для коммита
           if git diff --quiet --exit-code --cached; then
