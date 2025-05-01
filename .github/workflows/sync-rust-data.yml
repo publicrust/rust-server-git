@@ -42,7 +42,7 @@ jobs:
           kill "$(cat "${RUST_SERVER_DIR}/server.pid")" || true
 
       - name: Upload StringPool dump
-        uses: actions/upload-artifact@v3
+        uses: ./.github/actions/upload-artifact
         with:
           name: stringpool-dump
           path: rust_server/oxide/data/stringpool_dump.json
