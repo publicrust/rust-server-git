@@ -44,6 +44,13 @@ jobs:
           # Specify the path to the project file
           dotnet build /home/runner/generator/RustTemplateGenerator/RustTemplateGenerator.csproj --configuration Release
           echo "Generator built."
+
+      - name: Clone DLL Parser
+        run: |
+          echo "Cloning DLL parser..."
+          git clone https://github.com/publicrust/DotnetDllParser /home/runner/parser
+          echo "DLL parser cloned."
+
       - name: Run Template Generator
         run: |
           echo "Running generator (UpdateOnly mode)..."
@@ -132,6 +139,36 @@ jobs:
           ls -la "/home/runner/rust_server/oxide/data/" || echo "Could not list /home/runner/rust_server/oxide/data/"
       # --- КОНЕЦ НОВОГО ШАГА ОТЛАДКИ ---
 
+      # --- NEW: Run DLL Parser ---
+      - name: Run DLL Parser
+        run: |
+          echo "Running DLL parser..."
+          PARSER_PROJECT="/home/runner/parser/DllParser.csproj"
+          INPUT_DIR="/home/runner/rust_server/RustDedicated_Data/Managed"
+          OUTPUT_DIR="${{ github.workspace }}/.knowlenge/Decompiled"
+
+          # Ensure input directory exists
+          if [ ! -d "$INPUT_DIR" ]; then
+            echo "::error::Input directory for parser not found: $INPUT_DIR"
+            ls -la "/home/runner/rust_server/RustDedicated_Data/" || true
+            exit 1
+          fi
+
+          # Create output directory in workspace
+          mkdir -p "$OUTPUT_DIR"
+
+          # Run the parser
+          dotnet run --project "$PARSER_PROJECT" -- -s "$INPUT_DIR" -o "$OUTPUT_DIR"
+          echo "DLL Parser finished. Decompiled files should be in $OUTPUT_DIR"
+
+          # Check if output dir seems populated (optional)
+          if [ -z "$(ls -A $OUTPUT_DIR)" ]; then
+            echo "::warning::Decompiled output directory $OUTPUT_DIR appears empty."
+          else
+            echo "Decompiled output directory $OUTPUT_DIR contains files."
+          fi
+      # --- END: Run DLL Parser ---
+
       - name: Copy Data to Workspace
         run: |
           echo "Copying Managed folder..."
@@ -180,7 +217,7 @@ jobs:
 
           # Добавляем новые/измененные файлы и папки в индекс Git
           # Используем || true на случай, если одна из папок не скопировалась
-          git add Managed .rust-analyzer/stringPool.json .rust-analyzer/hooks.json || true
+          git add Managed .rust-analyzer/stringPool.json .rust-analyzer/hooks.json .knowlenge/ || true
 
           echo "--- Git Status after add ---"
           git status
@@ -192,7 +229,7 @@ jobs:
           else
             echo "Changes detected, committing and pushing..."
             # Создаем коммит
-            git commit -m "Update Managed folder, StringPool, and Hooks data [skip ci]"
+            git commit -m "Update Managed, StringPool, Hooks, and Decompiled data [skip ci]"
             # Отправляем коммит в ту же ветку, где запущен workflow
             # Используем GITHUB_TOKEN для аутентификации
             git push https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref_name }}
