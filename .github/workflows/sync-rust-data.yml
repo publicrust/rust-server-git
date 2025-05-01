@@ -17,27 +17,100 @@ jobs:
 
       - name: Download and make installer executable
         run: |
-          # Download installer that sets up Rust server, Oxide and plugin
-          curl -sL https://raw.githubusercontent.com/publicrust/rust-server-setup/main/install_rust_server.sh \
+          # Download installer that sets up Rust server, Oxide
+          curl -sL https://raw.githubusercontent.com/publicrust/rust-server-setup/main/install_rust_server.sh \\
             -o install_rust_server.sh
           chmod +x install_rust_server.sh
 
       - name: Install Rust server into workspace
         run: |
           # Installer will use $HOME/rust_server internally
+          # It downloads server, Oxide, and creates start.sh, but does NOT create the plugin anymore
           ./install_rust_server.sh
+
+      - name: Generate StringPoolDumper plugin with Quit
+        run: |
+          echo "== Generating StringPoolDumper plugin with Quit command=="
+          cd $HOME/rust_server
+          # Ensure plugins directory exists
+          mkdir -p oxide/plugins
+          # Write the C# plugin file, including the quit command
+          cat > oxide/plugins/StringPoolDumper.cs <<'EOF'
+          using Oxide.Core;
+
+          namespace Oxide.Plugins
+          {
+              [Info("StringPool Dumper", "RustGPT", "1.0.0")]
+              [Description("Dumps StringPool.toNumber dictionary to a JSON file and quits")]
+              public class StringPoolDumper : RustPlugin
+              {
+                  private const string FileName = "stringpool_dump.json";
+
+                  private void OnServerInitialized(bool initial)
+                  {
+                      Puts("Server initialized, starting dump plugin...");
+                      DumpStringPool();
+                  }
+
+                  private void DumpStringPool()
+                  {
+                      _ = StringPool.Get(""); // Ensure StringPool is initialized
+                      Interface.Oxide.DataFileSystem.WriteObject(FileName, StringPool.toNumber);
+                      Puts($"StringPool dumped to {FileName} in oxide/data directory");
+                      // --> Add the quit command here <--
+                      Interface.Oxide.ServerConsole.RunServerCommand("quit", "Server shutdown initiated by StringPoolDumper plugin after dump.");
+                      Puts("Quit command issued.");
+                  }
+              }
+          }
+          EOF
+          echo "Plugin StringPoolDumper.cs created in oxide/plugins:"
+          ls -l oxide/plugins/StringPoolDumper.cs
 
       - name: Link SteamClient library
         run: |
-          # Create Steam SDK directory for 64-bit library
           mkdir -p ~/.steam/sdk64
-          # Create symbolic link to steamclient.so from SteamCMD install (usually in $HOME/steamcmd)
-          # Use -f to overwrite if link exists, -s for symbolic
           ln -sf "$HOME/steamcmd/linux64/steamclient.so" ~/.steam/sdk64/steamclient.so
 
-      - name: Start Rust Server and Watch Logs
+      - name: Start Rust Server
         run: |
-          echo "Starting server in foreground..."
+          echo "Starting server in background and redirecting output..."
           cd $HOME/rust_server
-          # Execute start.sh directly. Workflow will block here.
-          ./start.sh
+          # Run in background and redirect output
+          ./start.sh > $HOME/rust_server/server_console.log 2>&1 &
+          echo $! > $HOME/rust_server/server.pid
+          echo "Server PID $! written to $HOME/rust_server/server.pid"
+          echo "Server console output is being redirected to $HOME/rust_server/server_console.log"
+          # Give server a moment to start up
+          sleep 15
+
+      - name: Check if server process is running
+        run: |
+          echo "Checking for RustDedicated process..."
+          ps aux | grep '[R]ustDedicated' || echo "Server process not found!"
+
+      - name: Wait for StringPool dump
+        run: |
+          # Wait up to 5 minutes for plugin to write the JSON and server to quit
+          # Use correct path for dump file
+          timeout 300 bash -c 'until [ -f "$HOME/rust_server/oxide/data/stringpool_dump.json" ]; do sleep 5; done'
+
+      - name: Display Server Logs
+        if: always() # Run even if the previous step failed
+        run: |
+          echo "### Displaying server_console.log (Initial Startup):"
+          cat "$HOME/rust_server/server_console.log" || echo "server_console.log not found or empty."
+          echo "" # Пустая строка для разделения
+          echo "### Listing log directory: $HOME/rust_server/oxide/logs/"
+          ls -la "$HOME/rust_server/oxide/logs/" || echo "Log directory not found or empty."
+          echo "### Displaying last 200 lines of Oxide log files (*.log):"
+          tail -n 200 "$HOME/rust_server/oxide/logs/"*.log || echo "No *.log files found in oxide/logs or other error occurred."
+
+      - name: Upload StringPool dump
+        # Attempt upload even if wait timed out, in case dump was created just before quit/timeout
+        if: success() || failure()
+        uses: ./.github/actions/upload-artifact
+        with:
+          name: stringpool-dump
+          # Use correct absolute path for artifact
+          path: /home/runner/rust_server/oxide/data/stringpool_dump.json
