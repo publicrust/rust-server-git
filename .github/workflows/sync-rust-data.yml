@@ -44,6 +44,14 @@ jobs:
           # Wait up to 5 minutes for plugin to write the JSON
           timeout 300 bash -c 'until [ -f "${RUST_SERVER_DIR}/oxide/data/stringpool_dump.json" ]; do sleep 5; done'
 
+      - name: Display Server Logs
+        if: always() # Run even if the previous step failed
+        run: |
+          echo "### Listing log directory: $RUST_SERVER_DIR/oxide/logs/"
+          ls -la "$RUST_SERVER_DIR/oxide/logs/" || echo "Log directory not found or empty."
+          echo "### Displaying last 200 lines of log files:"
+          tail -n 200 "$RUST_SERVER_DIR/oxide/logs/"*.log || echo "No *.log files found or other error occurred."
+
       - name: Stop Rust server
         run: |
           # Terminate the background server process
